@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
- * THE VOID - V3.0.5
- * Animation Update: Manual interpolation and Bezier smoothing.
- * Replaced jumpy transitions with fluid-ink easing.
+ * THE VOID - V3.0.7
+ * Scroll Optimization: Replaced animated transform grain with a static SVG noise filter.
+ * This eliminates the "Composite Layers" bottleneck that causes scrolling stutter.
  */
 
 const App = () => {
@@ -22,49 +22,6 @@ const App = () => {
   const [view, setView] = useState('main'); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [time, setTime] = useState({ d: 0, h: '00', m: '00', s: '00' });
-  const canvasRef = useRef(null);
-
-  // Noise/Grain Engine Logic
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
-
-    const resize = () => {
-      canvas.width = window.innerWidth / 4;
-      canvas.height = window.innerHeight / 4;
-    };
-
-    const noise = () => {
-      const w = canvas.width;
-      const h = canvas.height;
-      const idata = ctx.createImageData(w, h);
-      const buffer32 = new Uint32Array(idata.data.buffer);
-      const len = buffer32.length;
-
-      for (let i = 0; i < len; i++) {
-        const r = Math.random();
-        if (r < 0.08) {
-          buffer32[i] = 0xff000000; 
-        } else if (r > 0.99) {
-          buffer32[i] = 0x11000000;
-        }
-      }
-
-      ctx.putImageData(idata, 0, 0);
-      animationFrameId = requestAnimationFrame(noise);
-    };
-
-    window.addEventListener('resize', resize);
-    resize();
-    noise();
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -98,10 +55,18 @@ const App = () => {
   return (
     <div className="min-h-screen bg-[#f4f1ea] text-[#1a1a1a] font-serif selection:bg-[#1a1a1a] selection:text-[#f4f1ea] relative overflow-x-hidden">
       
+      {/* Hidden SVG Filter for High-Performance Grain */}
+      <svg className="absolute w-0 h-0 pointer-events-none opacity-0">
+        <filter id="void-grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
+          <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.15 0" />
+        </filter>
+      </svg>
+
       <style>{`
         @keyframes slideUp {
-          from { opacity: 0; transform: translateY(15px) scale(0.98); filter: blur(4px); }
-          to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+          from { opacity: 0; transform: translateY(15px); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
         @keyframes digitPulse {
@@ -109,16 +74,24 @@ const App = () => {
           100% { transform: translateY(0); opacity: 1; }
         }
 
+        .noise-layer {
+          position: fixed;
+          inset: 0;
+          z-index: 40;
+          pointer-events: none;
+          filter: url(#void-grain);
+          mix-blend-mode: multiply;
+          opacity: 0.4;
+        }
+
         .view-transition {
-          transition: opacity 0.6s cubic-bezier(0.23, 1, 0.32, 1), 
-                      transform 0.6s cubic-bezier(0.23, 1, 0.32, 1),
-                      filter 0.6s ease;
+          transition: opacity 0.4s cubic-bezier(0.23, 1, 0.32, 1), 
+                      transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
         }
 
         .view-hidden {
           opacity: 0;
-          transform: scale(0.99) translateY(10px);
-          filter: blur(8px);
+          transform: translateY(10px);
           pointer-events: none;
           position: absolute;
           width: 100%;
@@ -126,15 +99,14 @@ const App = () => {
 
         .view-visible {
           opacity: 1;
-          transform: scale(1) translateY(0);
-          filter: blur(0);
+          transform: translateY(0);
           position: relative;
-          animation: slideUp 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+          animation: slideUp 0.5s cubic-bezier(0.23, 1, 0.32, 1);
         }
 
         .digit-anim {
           display: inline-block;
-          animation: digitPulse 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          animation: digitPulse 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
         .nav-underline {
@@ -144,14 +116,14 @@ const App = () => {
           bottom: -4px;
           left: 0;
           right: 0;
-          transition: transform 0.4s cubic-bezier(0.68, -0.6, 0.32, 1.6);
+          transition: transform 0.3s ease;
           transform-origin: left;
         }
 
-        .ink-border { border: 3px solid #1a1a1a; transition: all 0.3s ease; }
+        .ink-border { border: 3px solid #1a1a1a; }
         .xerox-shadow { 
           box-shadow: 6px 6px 0px 0px #1a1a1a; 
-          transition: box-shadow 0.4s cubic-bezier(0.23, 1, 0.32, 1), transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
         
         .card-hover:hover {
@@ -160,29 +132,20 @@ const App = () => {
         }
 
         .tap-active:active { 
-          transform: scale(0.96) translate(4px, 4px); 
-          box-shadow: 0px 0px 0px 0px #1a1a1a; 
-        }
-
-        canvas.noise-layer {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          opacity: 0.05;
-          z-index: 40;
-          pointer-events: none;
-          mix-blend-mode: multiply;
+          transform: scale(0.98) translate(2px, 2px); 
+          box-shadow: 2px 2px 0px 0px #1a1a1a; 
         }
 
         .modal-enter {
-          animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+          animation: slideUp 0.3s cubic-bezier(0.23, 1, 0.32, 1);
         }
+
+        /* Optimization: Smoother scrolling by disabling pointer events on decorative layers */
+        * { -webkit-font-smoothing: antialiased; }
       `}</style>
 
-      {/* High-Performance Canvas Grain Layer */}
-      <canvas ref={canvasRef} className="noise-layer" />
+      {/* Static Noise Layer - Replaces the heavy animation */}
+      <div className="noise-layer" />
 
       <div className="relative z-10 max-w-4xl mx-auto p-4 md:p-10">
         
@@ -277,13 +240,12 @@ const App = () => {
                     <div 
                       key={item.id} 
                       className="flex justify-between items-center py-6 px-4 group hover:bg-[#1a1a1a] hover:text-[#f4f1ea] transition-all duration-300 cursor-default"
-                      style={{ animationDelay: `${idx * 0.05}s` }}
                     >
                       <div>
                         <p className="text-[9px] font-mono opacity-40 group-hover:opacity-100 transition-opacity">SEQ_{idx.toString().padStart(3, '0')}</p>
                         <p className="text-xl font-black uppercase tracking-tight">{new Date(item.date).toLocaleDateString()}</p>
                       </div>
-                      <div className="text-5xl font-black italic tracking-tighter transform group-hover:scale-110 transition-transform duration-300">
+                      <div className="text-5xl font-black italic tracking-tighter transform group-hover:scale-105 transition-transform duration-300">
                         {item.duration}D
                       </div>
                     </div>
@@ -304,7 +266,7 @@ const App = () => {
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-[#1a1a1a]/80 backdrop-blur-md transition-opacity duration-500" 
+            className="absolute inset-0 bg-[#1a1a1a]/80 backdrop-blur-md transition-opacity duration-300" 
             onClick={() => setIsModalOpen(false)} 
           />
           <div className="bg-[#f4f1ea] border-[8px] border-[#1a1a1a] p-10 max-w-sm w-full relative z-[101] xerox-shadow modal-enter">
